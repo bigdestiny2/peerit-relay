@@ -1,0 +1,23 @@
+{
+  "name": "peerit-relay",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Public, untrusted availability relay that bridges normal browsers into peerit's P2P network. Holds no signing keys; every record it serves is re-verified in the browser.",
+  "license": "MIT",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "scripts": {
+    "start": "node relay.mjs",
+    "start:prod": "PEERIT_RELAY_CORE=hypercore node relay.mjs",
+    "test": "node test/relay-e2e.mjs"
+  },
+  "comment": "The in-memory core needs no dependencies and powers the e2e test. The production 'hypercore' core needs these installed (npm i corestore hyperbee hyperswarm b4a) — they are not exercised by CI because they require a live DHT.",
+  "optionalDependencies": {
+    "b4a": "^1.6.7",
+    "corestore": "^6.18.4",
+    "hyperbee": "^2.20.0",
+    "hyperswarm": "^4.8.4"
+  }
+}
