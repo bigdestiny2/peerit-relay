@@ -1,0 +1,47 @@
+# systemd unit for peerit-relay. Install:
+#   sudo cp examples/.env.example /etc/peerit-relay.env && sudoedit /etc/peerit-relay.env
+#   sudo cp examples/peerit-relay.service /etc/systemd/system/
+#   sudo useradd --system --no-create-home --shell /usr/sbin/nologin peerit
+#   sudo chown -R peerit: /opt/peerit-relay
+#   sudo systemctl daemon-reload && sudo systemctl enable --now peerit-relay
+#
+# Restart=always + the uncaughtException handler in relay.mjs mean a crash or
+# OOM-kill is recovered automatically. MemoryMax is a hard backstop *below* the
+# in-process PEERIT_RELAY_MAX_BYTES budget, so the kernel reaps a runaway before
+# it can hurt the host.
+
+[Unit]
+Description=peerit untrusted availability relay
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=peerit
+Group=peerit
+WorkingDirectory=/opt/peerit-relay
+EnvironmentFile=/etc/peerit-relay.env
+ExecStart=/usr/bin/node relay.mjs
+Restart=always
+RestartSec=2
+# OOM backstop — keep comfortably above PEERIT_RELAY_MAX_BYTES (default 256 MiB)
+# plus V8 overhead. Tune to the box.
+MemoryMax=512M
+MemoryHigh=448M
+LimitNOFILE=8192
+
+# Hardening — the relay needs nothing but the network and its own dir.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/peerit-relay
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_INET AF_INET6
+RestrictNamespaces=true
+LockPersonality=true
+
+[Install]
+WantedBy=multi-user.target

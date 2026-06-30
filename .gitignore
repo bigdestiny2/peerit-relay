@@ -2,3 +2,8 @@ node_modules/
 relay-store/
 *.log
 .DS_Store
+
+# secrets — never commit a real env; the template is .env.example
+.env
+.env.*
+!.env.example

@@ -1,0 +1,33 @@
+# peerit-relay reverse proxy — Caddy terminates TLS (auto ACME) and forwards to
+# the relay bound on loopback. Caddy sets a trustworthy X-Forwarded-For, so the
+# relay runs with PEERIT_RELAY_TRUST_PROXY=1 and rate-limits the real client IP.
+#
+#   sudo caddy run --config examples/Caddyfile
+# Replace the email + hostname before use.
+
+{
+	email ops@peerit.site
+}
+
+relay.peerit.site {
+	encode zstd gzip
+
+	# Only the relay's API surface is proxied; everything else is refused so the
+	# host can't be probed for other paths.
+	@api path /api/*
+	handle @api {
+		reverse_proxy 127.0.0.1:8787 {
+			# SSE: stream events through immediately, no response buffering.
+			flush_interval -1
+		}
+	}
+	handle {
+		respond "peerit relay" 200
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		-Server
+	}
+}

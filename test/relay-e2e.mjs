@@ -15,8 +15,9 @@ import { createTokenAuth } from '../lib/token.mjs'
 import { DevIdentity } from '../../peerit/js/identity.js'
 import { createData } from '../../peerit/js/data.js'
 import { createSync } from '../../peerit/js/sync.js'
-import { ready as cryptoReady, isSecure } from '../../peerit/js/crypto.js'
+import { genKeyPair, sign, ready as cryptoReady, isSecure } from '../../peerit/js/crypto.js'
 import { makeValidator } from '../../peerit/js/pow.js'
+import { normalizeRelayRosterPayload, resolveRelayCandidates, rosterSigningMessage, selectRelay } from '../../peerit/js/relay-roster.js'
 
 let passed = 0
 const ok = (c, m) => { assert.ok(c, m); passed++; console.log('  ✓ ' + m) }
@@ -24,6 +25,14 @@ const delay = (ms) => new Promise((r) => setTimeout(r, ms))
 const BITS = { community: 7, post: 6, comment: 5 }
 function mem () { const m = new Map(); return { getItem: k => (m.has(k) ? m.get(k) : null), setItem: (k, v) => m.set(k, String(v)), removeItem: k => m.delete(k), clear: () => m.clear() } }
 async function until (fn, { tries = 140, gap = 70 } = {}) { for (let i = 0; i < tries; i++) { if (await fn()) return true; await delay(gap) } return false }
+function response (value, status = 200) { return { ok: status >= 200 && status < 300, status, text: async () => JSON.stringify(value), json: async () => value } }
+
+async function makeSignedRoster (relays) {
+  const kp = await genKeyPair()
+  const payload = normalizeRelayRosterPayload({ version: 1, expires: '2030-01-01T00:00:00.000Z', relays })
+  const sig = await sign(kp.seedHex, rosterSigningMessage(payload))
+  return { key: kp.pubHex, roster: { payload, signature: { alg: 'Ed25519', key: kp.pubHex, sig } } }
+}
 
 // Minimal SSE client over node http — the relay sends `data: {json}\n\n` frames.
 class NodeEventSource {
@@ -74,6 +83,7 @@ async function main () {
   const server = http.createServer(createRelayHandler({ core, auth }))
   await new Promise((r) => server.listen(0, '127.0.0.1', r))
   const base = 'http://127.0.0.1:' + server.address().port
+  const deadBase = 'http://127.0.0.1:1'
 
   console.log('\n— relay contract: auth + CORS + no signing —')
   ok((await fetch(base + '/api/sync/status?appId=x')).status === 401, 'requests without a token are rejected (401)')
@@ -84,9 +94,23 @@ async function main () {
   const pre = await fetch(base + '/api/sync/status?appId=x', { method: 'OPTIONS' })
   ok(pre.status === 204 && pre.headers.get('access-control-allow-headers').includes('x-pear-token'), 'CORS preflight allows the X-Pear-Token header (cross-origin browser access)')
 
+  console.log('\n— signed roster + client relay selection —')
+  const signed = await makeSignedRoster([deadBase, base])
+  const candidates = await resolveRelayCandidates({
+    relays: [deadBase],
+    roster: { url: 'https://peerit.test/relay-roster.json', key: signed.key },
+    fetch: async () => response(signed.roster),
+    now: Date.parse('2029-01-01T00:00:00.000Z')
+  })
+  ok(candidates.rosterVerified && candidates.relays[0] === deadBase && candidates.relays[1] === base,
+    'client verifies the signed roster and preserves relay priority')
+  const selected = await selectRelay(candidates.relays, { fetch: globalThis.fetch })
+  ok(selected && selected.apiBase === base && typeof selected.apiToken === 'string',
+    'client skips the dead relay and gets a token from the live relay')
+
   console.log('\n— two web clients converge through the real relay —')
-  const alice = await makeClient(base, tok, 'alice')
-  const bob = await makeClient(base, tok, 'bob')
+  const alice = await makeClient(selected.apiBase, selected.apiToken, 'alice')
+  const bob = await makeClient(selected.apiBase, selected.apiToken, 'bob')
   ok(alice.sync.mode === 'gossip-bridge' && bob.sync.mode === 'gossip-bridge', 'both web clients run gossip-bridge over HTTP (the chip reads "gossip-bridge")')
   ok(alice.id.isDev === true && bob.id.isDev === true, 'identities are browser-local (DevIdentity), not host/relay-signed')
 
