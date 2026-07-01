@@ -45,7 +45,8 @@ npm test                       # end-to-end: two web clients converge over real 
 | `PEERIT_RELAY_SSE_PER_IP` | `8` | max concurrent event streams per IP before `429` (total cap 2000) |
 | `PEERIT_RELAY_MAX_BYTES` | `256` | in-memory record budget in MiB before `503` (memory core) |
 | `PEERIT_RELAY_MAX_GROUPS` | `20000` | max distinct outboxes before `503` (memory core) |
-| `PEERIT_RELAY_PERSIST` | unset | path on a **persistent disk** to snapshot the memory store to, so a restart/redeploy reloads content instead of wiping it (memory core). Unset = ephemeral. |
+| `PEERIT_RELAY_PERSIST` | unset | path on a **persistent disk** to snapshot the memory store to, so a restart/redeploy reloads content **and the remembered signed descriptors** (discoverability, not just data) instead of wiping them (memory core). Unset = ephemeral. |
+| `PEERIT_RELAY_PERSIST_MS` | `5000` | debounce interval (ms) between disk snapshots when persistence is on |
 | `PEERIT_ROSTER_SEED` | unset | 64-hex Ed25519 seed used only by `npm run roster:sign`; keep it offline |
 | `PEERIT_RELAY_ROSTER_RELAYS` | unset | comma-separated relay URLs for `npm run roster:sign` |
 | `PEERIT_ROSTER_EXPIRES` | 30 days from now | ISO timestamp for the signed roster expiry |
@@ -142,8 +143,14 @@ Ready-to-edit configs live in [`examples/`](examples): `Caddyfile` (TLS + same-o
    `/etc/peerit-relay.env`.
 7. **Production core:** `npm i` the optional deps, run `start:prod`. Validate on
    a live network (see the caveats in `lib/core-hypercore.mjs`) before relying on it.
-8. **Durability:** run `02-apps/peerit-seeder` so outboxes stay available when no
-   browser is online; relays are availability providers, not the source of truth.
+8. **Durability:** set `PEERIT_RELAY_PERSIST` to a file on a persistent disk. The
+   memory core then snapshots both content and the remembered signed descriptors,
+   so a restart/redeploy keeps outboxes **available and discoverable** with no live
+   seeder — a visitor finds an outbox even when its author is offline (the relay
+   replays the author's signed descriptor; it can't forge one). Running
+   `02-apps/peerit-seeder` on top adds a second independent availability provider,
+   but is no longer required. Relays remain availability providers, not the source
+   of truth — every record is re-verified in the browser.
 9. **Point the app at it:** add to the peerit web export's `index.html`:
    ```html
    <meta name="peerit-relay" content="https://relay.peerit.site">
