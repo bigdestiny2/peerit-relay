@@ -160,8 +160,18 @@ Ready-to-edit configs live in [`examples/`](examples): `Caddyfile` (TLS + same-o
    ```
    This `<meta>` is ignored by PearBrowser (it uses the injected `window.pear`),
    so it never changes the native P2P experience.
-10. **Run more than one.** A single relay is a liveness chokepoint. Publish a
-    signed roster and let clients fail over (peerit Phase 2).
+10. **Run more than one — now live.** A single relay is a liveness/censorship
+    chokepoint. peerit ships a **signed multi-relay roster** and fails over across
+    the pool; **as of 2026-07-01 the live roster carries two independent relays**
+    (a self-hosted VPS + a managed host), which activates peerit's cross-relay
+    rollback/strip detection and read-around (`02-apps/peerit/js/relay-pool.js`).
+    Add yours to the roster and the pool grows.
+
+> **One-command deploy:** besides the systemd `examples/` above, there's a
+> Docker + Caddy (auto-TLS) bundle at
+> [`../peerit/deploy/peerit-relay/`](../peerit/deploy/peerit-relay/) — it's what
+> peerit.site's self-hosted second relay runs. `docker compose up -d` and you're on
+> the pool.
 
 ## Architecture
 
@@ -171,7 +181,11 @@ browser (keys + verify)  ──HTTP/SSE──►  relay (this)  ──Hyperswarm
 ```
 
 - `lib/server.mjs` — the `/api/*` HTTP+SSE surface (token auth, CORS, rate limit).
-- `lib/core-memory.mjs` — in-memory sync + swarm (CI-proven contract reference).
+- `lib/core-memory.mjs` — in-memory sync + swarm (CI-proven contract reference). Its
+  wire contract is locked by [`test/wire-conformance.mjs`](test/wire-conformance.mjs)
+  (26 golden assertions) and is being generalized into **OutboxLog**, a first-class
+  *blind* HiveRelay service any P2P web app can use — see peerit's
+  [OUTBOXLOG plan](../peerit/docs/HIVERELAY-OUTBOXLOG-PLAN.md) + [handover spec](../peerit/docs/OUTBOXLOG-HANDOVER-SPEC.md).
 - `lib/core-hypercore.mjs` — DHT-replicated sync (production; reference impl).
 - `lib/swarm-hub.mjs` — in-process topic hub for browser↔browser descriptor discovery (shared by both cores).
 - `lib/token.mjs` — stateless HMAC first-visit tokens.
