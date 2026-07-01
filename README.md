@@ -45,6 +45,7 @@ npm test                       # end-to-end: two web clients converge over real 
 | `PEERIT_RELAY_SSE_PER_IP` | `8` | max concurrent event streams per IP before `429` (total cap 2000) |
 | `PEERIT_RELAY_MAX_BYTES` | `256` | in-memory record budget in MiB before `503` (memory core) |
 | `PEERIT_RELAY_MAX_GROUPS` | `20000` | max distinct outboxes before `503` (memory core) |
+| `PEERIT_RELAY_PERSIST` | unset | path on a **persistent disk** to snapshot the memory store to, so a restart/redeploy reloads content instead of wiping it (memory core). Unset = ephemeral. |
 | `PEERIT_ROSTER_SEED` | unset | 64-hex Ed25519 seed used only by `npm run roster:sign`; keep it offline |
 | `PEERIT_RELAY_ROSTER_RELAYS` | unset | comma-separated relay URLs for `npm run roster:sign` |
 | `PEERIT_ROSTER_EXPIRES` | 30 days from now | ISO timestamp for the signed roster expiry |

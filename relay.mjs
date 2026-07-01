@@ -11,6 +11,8 @@
 //   PEERIT_RELAY_SSE_PER_IP  max concurrent event streams per IP (default 8)
 //   PEERIT_RELAY_MAX_BYTES   in-memory storage budget in MiB (default 256)
 //   PEERIT_RELAY_MAX_GROUPS  max distinct outboxes (default 20000)
+//   PEERIT_RELAY_PERSIST     path on a PERSISTENT disk to snapshot the memory store to
+//                            (default unset = ephemeral; set it so a restart reloads content)
 //   PEERIT_RELAY_STORAGE     corestore path for the hypercore core (default ./relay-store)
 
 import http from 'node:http'
@@ -39,11 +41,17 @@ async function makeCore () {
   }
   return createMemoryCore({
     maxTotalBytes: intEnv('PEERIT_RELAY_MAX_BYTES', 256) * 1024 * 1024,
-    maxGroups: intEnv('PEERIT_RELAY_MAX_GROUPS', 20000)
+    maxGroups: intEnv('PEERIT_RELAY_MAX_GROUPS', 20000),
+    // Point PEERIT_RELAY_PERSIST at a file on a PERSISTENT disk to survive
+    // restarts/redeploys (a plain container FS is wiped on redeploy).
+    persist: process.env.PEERIT_RELAY_PERSIST ? { path: process.env.PEERIT_RELAY_PERSIST, intervalMs: intEnv('PEERIT_RELAY_PERSIST_MS', 5000) } : null
   })
 }
 
 const core = await makeCore()
+// Graceful shutdown: flush the durability snapshot before exit so a restart/
+// redeploy (Render sends SIGTERM) doesn't lose the last few seconds of writes.
+for (const sig of ['SIGTERM', 'SIGINT']) process.on(sig, () => { try { core.flush && core.flush() } catch {} process.exit(0) })
 const auth = createTokenAuth()
 const handler = createRelayHandler({
   core,
